@@ -20,7 +20,7 @@ static const char cursortheme[]             = "Bibata-Modern-Amber";
 static const unsigned int cursorsize        = 24;
 
 /* tagging - TAGCOUNT must be no greater than 31 */
-#define TAGCOUNT (9)
+#define TAGCOUNT (5)
 
 /* logging */
 static int log_level = WLR_ERROR;
