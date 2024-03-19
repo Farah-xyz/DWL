@@ -1,18 +1,23 @@
+/* Media keys */
+#include <X11/XF86keysym.h>
 /* Taken from https://github.com/djpohly/dwl/issues/466 */
 #define COLOR(hex)    { ((hex >> 24) & 0xFF) / 255.0f, \
                         ((hex >> 16) & 0xFF) / 255.0f, \
                         ((hex >> 8) & 0xFF) / 255.0f, \
                         (hex & 0xFF) / 255.0f }
 /* appearance */
-static const int sloppyfocus               = 1;  /* focus follows mouse */
-static const int bypass_surface_visibility = 0;  /* 1 means idle inhibitors will disable idle tracking even if it's surface isn't visible  */
-static const unsigned int borderpx         = 1;  /* border pixel of windows */
-static const float rootcolor[]             = COLOR(0x222222ff);
-static const float bordercolor[]           = COLOR(0x444444ff);
-static const float focuscolor[]            = COLOR(0x005577ff);
-static const float urgentcolor[]           = COLOR(0xff0000ff);
+static const int sloppyfocus                = 1;  /* focus follows mouse */
+static const int bypass_surface_visibility  = 0;  /* 1 means idle inhibitors will disable idle tracking even if it's surface isn't visible  */
+static const unsigned int borderpx          = 2;  /* border pixel of windows */
+static const float rootcolor[]              = COLOR(0x1d2021ff);
+static const float bordercolor[]            = COLOR(0x282828ff);
+static const float focuscolor[]             = COLOR(0x689d6aff);
+static const float urgentcolor[]            = COLOR(0x9d0006ff);
 /* To conform the xdg-protocol, set the alpha to zero to restore the old behavior */
-static const float fullscreen_bg[]         = {0.1f, 0.1f, 0.1f, 1.0f}; /* You can also use glsl colors */
+static const float fullscreen_bg[]          = {0.1f, 0.1f, 0.1f, 1.0f}; /* You can also use glsl colors */
+static const int center_relative_to_monitor = 0; /* 0 means center floating relative to the window area */
+static const char cursortheme[]             = "Bibata-Modern-Amber";
+static const unsigned int cursorsize        = 24;
 
 /* tagging - TAGCOUNT must be no greater than 31 */
 #define TAGCOUNT (9)
@@ -20,12 +25,26 @@ static const float fullscreen_bg[]         = {0.1f, 0.1f, 0.1f, 1.0f}; /* You ca
 /* logging */
 static int log_level = WLR_ERROR;
 
+/* Autostart */
+static const char *const autostart[] = {
+        "bash", "/home/lli/.config/wayland-suckless/dwl/scripts/autostart.sh", NULL,
+        "bash", "/home/lli/.config/wayland-suckless/dwl/scripts/gtkTheme.sh", NULL,
+        NULL /* terminate */
+};
+
+
 static const Rule rules[] = {
-	/* app_id     title       tags mask     isfloating   monitor */
+	/* app_id     title       tags mask  switchtotag    isfloating     isterm  noswallow    monitor     x   y  width height */
 	/* examples:
-	{ "Gimp",     NULL,       0,            1,           -1 },
+	{ "Gimp",     NULL,        0,           1,              1,            0,         1,         -1      0,  0, 1000, 0.75 },
 	*/
-	{ "firefox",  NULL,       1 << 8,       0,           -1 },
+	{ "Firefox",   NULL,       1 << 2,      1,               0,            0,         0,        -1,     0,  0, 0,    0 },
+	{"qutebrowser",NULL,       1 << 2,      1,               0,            0,         0,        -1,     0,  0, 0,    0 },
+	{ "foot",      NULL,       0,           0,               0,            1,         1,        -1,     0,  0, 0,    0 },
+	{ "wezterm",   NULL,       0,           0,               0,            1,         1,        -1,     0,  0, 0,    0 },
+	{ "foot_float",NULL,       0,           0,               1,            1,         1,        -1,     0,  0, 1000, 0.75 },
+	{ "wez_float", NULL,       0,           0,               1,            1,         1,        -1,     0,  0, 1000, 0.75 },
+	{ "fileCli",   NULL,       0,           0,               1,            1,         1,        -1,     0,  0, 1000, 0.75 },
 };
 
 /* layout(s) */
@@ -53,11 +72,12 @@ static const struct xkb_rule_names xkb_rules = {
 	/* example:
 	.options = "ctrl:nocaps",
 	*/
-	.options = NULL,
+	.options = "caps:escape,grp:alt_altgr_toggle",
+    .layout  = "us,ara",
 };
 
-static const int repeat_rate = 25;
-static const int repeat_delay = 600;
+static const int repeat_rate = 50;
+static const int repeat_delay = 200;
 
 /* Trackpad */
 static const int tap_to_click = 1;
@@ -94,7 +114,7 @@ LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT
 LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE
 */
 static const enum libinput_config_accel_profile accel_profile = LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
-static const double accel_speed = 0.0;
+static const double accel_speed = 0.5;
 /* You can choose between:
 LIBINPUT_CONFIG_TAP_MAP_LRM -- 1/2/3 finger tap maps to left/right/middle
 LIBINPUT_CONFIG_TAP_MAP_LMR -- 1/2/3 finger tap maps to left/middle/right
@@ -114,29 +134,82 @@ static const enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TA
 #define SHCMD(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
 
 /* commands */
-static const char *termcmd[] = { "foot", NULL };
-static const char *menucmd[] = { "bemenu-run", NULL };
+static const char *menucmd[]          = { "wmenu_run", NULL };
+static const char *termcmd[]          = { "foot", NULL };
+static const char *termbidi[]         = { "wezterm", NULL };
+static const char *browser[]          = { "firefox", NULL };
+static const char *browserVi[]        = { "qutebrowser", NULL };
+static const char *fileCli[]          = { "wezterm", "start", "--class", "fileCli", "nnn", "-P", "z", NULL };
+static const char *fileGui[]          = { "nemo", NULL };
+static const char *onScreenKeyboard[] = { "bash", "/home/lli/.config/wayland-suckless/dwl/scripts/onScreenKeyboard.sh", NULL};
+static const char *screenShoot[]      = { "bash", "/home/lli/.config/wayland-suckless/dwl/scripts/screenShoot.sh", NULL};
+static const char *screenRecored[]    = { "bash", "/home/lli/.config/wayland-suckless/dwl/scripts/screenRecored.sh", NULL};
+static const char *powerMenu[]        = { "bash", "/home/lli/.config/wayland-suckless/dwl/scripts/powerMenu.sh", NULL};
+static const char *wifiMenu[]         = { "bash", "/home/lli/.config/wayland-suckless/dwl/scripts/wifiMenu.sh", NULL};
+static const char *blueMenu[]         = { "bash", "/home/lli/.config/wayland-suckless/dwl/scripts/blueMenu.sh", NULL};
+static const char *mountMenu[]        = { "bash", "/home/lli/.config/wayland-suckless/dwl/scripts/mountMenu.sh", NULL};
+static const char *audioMute[]        = { "wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle", NULL};
+static const char *micMute[]          = { "wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle",  NULL};
+static const char *raiseVolume[]      = { "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%+", "-l", "1.3",  NULL};
+static const char *lowerVolume[]      = { "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-",  NULL};
+static const char *lightUp[]          = { "brightnessctl", "set", "+5%",  NULL};
+static const char *lightDown[]        = { "brightnessctl", "set", "5%-",  NULL};
+static const char *reloadBar[]        = { "pkill", "-SIGRTMIN+10", "someblocks",  NULL};
 
 static const Key keys[] = {
 	/* Note that Shift changes certain key codes: c -> C, 2 -> at, etc. */
 	/* modifier                  key                 function        argument */
 	{ MODKEY,                    XKB_KEY_p,          spawn,          {.v = menucmd} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Return,     spawn,          {.v = termcmd} },
+	{ MODKEY,                    XKB_KEY_Return,     spawn,          {.v = termcmd} },
+	{ MODKEY,                    XKB_KEY_backslash,  spawn,          {.v = termbidi} },
+	{ MODKEY,                    XKB_KEY_w,          spawn,          {.v = browser} },
+	{ MODKEY,                    XKB_KEY_q,          spawn,          {.v = browserVi} },
+	{ MODKEY,                    XKB_KEY_n,          spawn,          {.v = fileCli} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_N,          spawn,          {.v = fileGui} },
+	{ MODKEY,                    XKB_KEY_o,          spawn,          {.v = onScreenKeyboard} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_S,          spawn,          {.v = screenShoot} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_R,          spawn,          {.v = screenRecored} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_p,          spawn,          {.v = powerMenu} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_W,          spawn,          {.v = wifiMenu} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_B,          spawn,          {.v = blueMenu} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_M,          spawn,          {.v = mountMenu} },
+	{ 0,                         XF86XK_AudioMute,   spawn,          {.v = audioMute} },
+	{ 0,                         XF86XK_AudioMicMute,spawn,          {.v = micMute} },
+	{ 0,                         XF86XK_AudioRaiseVolume, spawn,     {.v = raiseVolume} },
+	{ 0,                         XF86XK_AudioLowerVolume, spawn,     {.v = lowerVolume} },
+	{ 0,                         XF86XK_MonBrightnessUp,  spawn,     {.v = lightUp} },
+	{ 0,                         XF86XK_MonBrightnessDown,spawn,     {.v = lightDown} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_r,          spawn,          {.v = reloadBar} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Return,     spawn,          SHCMD("foot --app-id foot_float") },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_bar,        spawn,          SHCMD("wezterm start --class wez_float") },
+	{ WLR_MODIFIER_LOGO,         XKB_KEY_p,          spawn,          SHCMD("mocp --toggle-pause") },
+	{ WLR_MODIFIER_LOGO,         XKB_KEY_n,          spawn,          SHCMD("mocp --next") },
+	{ WLR_MODIFIER_LOGO,         XKB_KEY_b,          spawn,          SHCMD("mocp --previous") },
+	{ WLR_MODIFIER_LOGO,         XKB_KEY_q,          spawn,          SHCMD("mocp --exit") },
+	{ WLR_MODIFIER_LOGO,         XKB_KEY_comma,      spawn,          SHCMD("mocp --seek -10") },
+	{ WLR_MODIFIER_LOGO,         XKB_KEY_period,     spawn,          SHCMD("mocp --seek +10") },
 	{ MODKEY,                    XKB_KEY_j,          focusstack,     {.i = +1} },
 	{ MODKEY,                    XKB_KEY_k,          focusstack,     {.i = -1} },
-	{ MODKEY,                    XKB_KEY_i,          incnmaster,     {.i = +1} },
-	{ MODKEY,                    XKB_KEY_d,          incnmaster,     {.i = -1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_J,          movestack,      {.i = +1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_K,          movestack,      {.i = -1} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_comma,      incnmaster,     {.i = +1} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_period,     incnmaster,     {.i = -1} },
 	{ MODKEY,                    XKB_KEY_h,          setmfact,       {.f = -0.05f} },
 	{ MODKEY,                    XKB_KEY_l,          setmfact,       {.f = +0.05f} },
-	{ MODKEY,                    XKB_KEY_Return,     zoom,           {0} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_l,          setcfact,       {.f = +0.25f} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_h,          setcfact,       {.f = -0.25f} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_k,          setcfact,       {.f = 0.0f} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_H,          viewnextocctag, {.i = -1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_L,          viewnextocctag, {.i = +1} },
+	{ MODKEY,                    XKB_KEY_s,          zoom,           {0} },
 	{ MODKEY,                    XKB_KEY_Tab,        view,           {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_C,          killclient,     {0} },
 	{ MODKEY,                    XKB_KEY_t,          setlayout,      {.v = &layouts[0]} },
-	{ MODKEY,                    XKB_KEY_f,          setlayout,      {.v = &layouts[1]} },
+	{ MODKEY,                    XKB_KEY_e,          setlayout,      {.v = &layouts[1]} },
 	{ MODKEY,                    XKB_KEY_m,          setlayout,      {.v = &layouts[2]} },
 	{ MODKEY,                    XKB_KEY_space,      setlayout,      {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_space,      togglefloating, {0} },
-	{ MODKEY,                    XKB_KEY_e,         togglefullscreen, {0} },
+	{ MODKEY,                    XKB_KEY_f,         togglefullscreen, {0} },
 	{ MODKEY,                    XKB_KEY_0,          view,           {.ui = ~0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_parenright, tag,            {.ui = ~0} },
 	{ MODKEY,                    XKB_KEY_comma,      focusmon,       {.i = WLR_DIRECTION_LEFT} },
@@ -152,7 +225,7 @@ static const Key keys[] = {
 	TAGKEYS(          XKB_KEY_7, XKB_KEY_ampersand,                  6),
 	TAGKEYS(          XKB_KEY_8, XKB_KEY_asterisk,                   7),
 	TAGKEYS(          XKB_KEY_9, XKB_KEY_parenleft,                  8),
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Q,          quit,           {0} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_q,          quit,           {0} },
 
 	/* Ctrl-Alt-Backspace and Ctrl-Alt-Fx used to be handled by X server */
 	{ WLR_MODIFIER_CTRL|WLR_MODIFIER_ALT,XKB_KEY_Terminate_Server, quit, {0} },
